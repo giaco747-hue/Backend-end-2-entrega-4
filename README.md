@@ -1,56 +1,94 @@
-# Proyecto Backend - Coderhouse (Pre-entrega 3)
+# Proyecto Backend - Coderhouse (Pre-entrega 4)
 
-Backend desarrollado con Node.js, Express y MongoDB, implementando un sistema de autenticación seguro de usuarios mediante JWT (JSON Web Tokens) almacenados en cookies `httpOnly`[cite: 5].
+Backend desarrollado con Node.js, Express y MongoDB para la Plataforma de Eventos e Inscripciones, refactorizando el sistema de autenticación mediante **Passport.js** para centralizar las estrategias de registro, login y validación de sesión con JWT almacenado en cookies `httpOnly`.
 
 ## Tecnologías Utilizadas
 * **Node.js** & **Express**
-* **MongoDB** & **Mongoose** (Base de datos y modelado)
-* **Bcrypt** (Hasheo seguro de contraseñas)[cite: 5]
-* **JSON Web Token (JWT)** & **Cookie-Parser** (Autenticación y manejo de sesión)[cite: 5]
-
-## Configuración y Arranque
-
-1. Clonar el repositorio.
-2. Ejecutar `npm install` para instalar las dependencias.
-3. Crear un archivo `.env` en la raíz del proyecto basándose en las variables de `.env.example`[cite: 4, 5].
-4. Ejecutar el servidor en modo desarrollo con `npm run dev`.
+* **MongoDB** & **Mongoose**
+* **Passport.js** (`passport`, `passport-local`, `passport-jwt`)
+* **Bcrypt** (Hasheo seguro de contraseñas)
+* **JSON Web Token (JWT)** & **Cookie-Parser**
 
 ---
 
-## Documentación de la API (Endpoints)[cite: 4]
+## Arquitectura de Autenticación Centralizada
+
+Toda la lógica de estrategias se encuentra centralizada en `src/config/passport.config.js`, mientras que `src/app.js` únicamente inicializa Passport (`passport.initialize()`):
+
+1. **Estrategia `register` (`passport-local`):** Valida campos obligatorios, verifica el formato del email, normaliza el correo, comprueba unicidad en MongoDB, hashea la contraseña con `bcrypt` y crea el usuario con rol `user` por defecto.
+2. **Estrategia `login` (`passport-local`):** Verifica la existencia del usuario y compara la contraseña con `bcrypt`. Tras la autenticación exitosa, el controlador (`sessions.controller.js`) genera el JWT y configura la cookie `currentUser` (`httpOnly: true`).
+3. **Estrategia `current` (`passport-jwt`):** Extrae el token desde la cookie `currentUser` mediante un extractor personalizado (`cookieExtractor`), verifica su firma y deja el payload decodificado (`id`, `email`, `role`) disponible en `req.user` sin exponer la contraseña.
+
+### Preparación para Proveedores Externos
+La arquitectura modular en `src/config/passport.config.js` queda preparada para incorporar futuras estrategias de autenticación externa (como **Google** o **GitHub** mediante OAuth2) agregando nuevas estrategias directamente en dicho archivo de configuración, sin necesidad de modificar `src/app.js` ni alterar la estructura base del servidor.
+
+---
+
+## Variables de Entorno
+
+Crear un archivo `.env` en la raíz del proyecto tomando como referencia `.env.example`:
+
+| Variable | Descripción | Ejemplo |
+| :--- | :--- | :--- |
+| `PORT` | Puerto en el que levanta el servidor Express | `3000` |
+| `NODE_ENV` | Entorno de ejecución (`development` o `production`) | `development` |
+| `MONGO_URL` | Cadena de conexión a MongoDB | `mongodb+srv://...` |
+| `JWT_SECRET` | Clave secreta para firmar y verificar los tokens JWT | `clave_secreta_segura` |
+| `JWT_EXPIRES_IN` | Tiempo de expiración del token JWT | `1h` |
+
+---
+
+## Instalación y Arranque
+
+1. Clonar el repositorio.
+2. Instalar dependencias con `npm install`.
+3. Configurar el archivo `.env` a partir de `.env.example`.
+4. Iniciar el servidor en modo desarrollo con `npm run dev`.
+
+---
+
+## Documentación de la API (Endpoints)
 
 ### 1. Registro de Usuario
 * **Ruta:** `POST /api/sessions/register`
-* **Descripción:** Valida campos obligatorios, normaliza el email, rechaza duplicados, hashea la contraseña con `bcrypt` y guarda el usuario sin devolver información sensible.
+* **Middleware:** `passport.authenticate('register', { session: false })`
+* **Descripción:** Registra un nuevo usuario en la base de datos sin devolver su contraseña.
 
 **Ejemplo de Request (Body JSON):**
 ```json
 {
   "first_name": "Rodrigo",
-  "last_name": "Pérez",
-  "email": "rodrigo@mail.com",
+  "last_name": "Navas",
+  "email": "rodrigo.passport@mail.com",
   "password": "Secreta123"
 }
-Respuestas:201 Created: Usuario registrado exitosamente.400 Bad Request: Faltan campos o el email tiene formato inválido.409 Conflict: El email ya está registrado.2. Login de UsuarioRuta: POST /api/sessions/loginDescripción: Busca al usuario por email y compara la contraseña. Si coinciden, genera un JWT con el payload { id, email, role } y lo almacena en una cookie currentUser configurada como httpOnly.   Ejemplo de Request (Body JSON):JSON{
-  "email": "rodrigo@mail.com",
-  "password": "Secreta123"
-}
-Respuestas:200 OK: Login exitoso (Configura la cookie currentUser en el navegador/cliente).   400 Bad Request: Faltan credenciales (email o contraseña).   401 Unauthorized: Credenciales inválidas (mensaje genérico por seguridad).   3. Obtener Usuario Actual (Current)Ruta: GET /api/sessions/currentDescripción: Ruta protegida mediante middleware. Lee la cookie currentUser, verifica y valida el JWT y devuelve el payload del usuario autenticado (sin el password).   Respuestas:200 OK: Devuelve el payload del usuario autenticado.   JSON{
-  "status": "success",
-  "payload": {
-    "id": "6aefc21bf054...",
-    "email": "rodrigo@mail.com",
-    "role": "user",
-    "iat": 1794097769,
-    "exp": 1794101369
-  }
-}
-401 Unauthorized: No autenticado (falta la cookie, token inválido o expirado).   4. Logout de UsuarioRuta: POST /api/sessions/logoutDescripción: Elimina la cookie currentUser del cliente para cerrar la sesión activa[cite: 1, 5].Respuestas:200 OK: Sesión cerrada exitosamente (borra la cookie).   
-Guarda el archivo y ejecuta tu último push para dejar el repositorio listo para la entrega:
 
-```bash
-git add README.md
-git commit -m "docs: actualizar readme con documentacion completa de rutas auth jwt y cookies"
-git push origin main
+---
 
-                **** CREADO POR RODRIGO NAVAS GIACOMETTO PARA CODERHOUSE ****
+---
+
+## Evidencias de Pruebas (Thunder Client)
+
+### 1. Registro exitoso (`POST /api/sessions/register` - 201 Created)
+![Evidencia 1](./evidencias/Captura%20de%20pantalla%202026-11-22%20204623.png)
+
+### 2. Login exitoso (`POST /api/sessions/login` - 200 OK)
+![Evidencia 2](./evidencias/Captura%20de%20pantalla%202026-11-22%20204722.png)
+
+### 3. Cookie `currentUser` (`httpOnly`) generada en Login
+![Evidencia 3](./evidencias/Captura%20de%20pantalla%202026-11-22%20204844.png)
+
+### 4. Usuario actual autenticado (`GET /api/sessions/current` - 200 OK)
+![Evidencia 4](./evidencias/Captura%20de%20pantalla%202026-11-22%20204945.png)
+
+### 5. Logout y bloqueo posterior (`POST /logout` 200 OK ➔ `GET /current` 401 Unauthorized)
+![Evidencia 5](./evidencias/Captura%20de%20pantalla%202026-11-22%20205043.png)
+
+### 6. Caso 2: Registro con email duplicado (`409 Conflict`)
+![Evidencia 6](./evidencias/Captura%20de%20pantalla%202026-11-22%20205354.png)
+
+### 7. Caso 3: Login con credenciales inválidas (`401 Unauthorized`)
+![Evidencia 7](./evidencias/Captura%20de%20pantalla%202026-11-22%20205555.png)
+
+### 8. Caso 4: `GET /api/sessions/current` con token manipulado (`401 Unauthorized`)
+![Evidencia 8](./evidencias/Captura%20de%20pantalla%202026-11-22%20210556.png)
